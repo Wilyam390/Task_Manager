@@ -12,9 +12,23 @@ def client():
     app.config['TESTING'] = True
     
     import sqlite3
+    # Initialize database with schema
     conn = sqlite3.connect('tasks.db')
-    conn.execute('DELETE FROM tasks')
-    conn.execute("INSERT INTO tasks (id, title, description, completed) VALUES (1, 'Test Task', 'Test description', 0)")
+    cursor = conn.cursor()
+    
+    # Create table if it doesn't exist
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            completed INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Clear existing data and insert test data
+    cursor.execute('DELETE FROM tasks')
+    cursor.execute("INSERT INTO tasks (title, completed) VALUES ('Test Task', 0)")
     conn.commit()
     conn.close()
     
