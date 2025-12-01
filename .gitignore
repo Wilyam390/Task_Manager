@@ -25,6 +25,10 @@ instance/
 .DS_Store
 Thumbs.db
 tasks.db
+<<<<<<< HEAD
 *.PublishSettings
 appsettings.json
 credentials.json
+=======
+.env
+>>>>>>> 97c530a081e03c25087ee48c42c2b4acf2448e82
