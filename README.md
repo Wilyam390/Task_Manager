@@ -6,8 +6,8 @@ A cloud-native task management application built with Python Flask and deployed 
 
 This is a full-stack web application demonstrating modern DevOps practices including CI/CD, cloud deployment, monitoring, and automated testing. Built as part of IE University's Software Development and DevOps course.
 
-**Team Members:** [Add your team members here]  
-**Sprint Status:** Sprint 3 - Database Integration, Logging & Monitoring Complete
+**Team Members:** Development Team  
+**Sprint Status:** Sprint 4 Complete - Enhanced Features & Demo Ready
 
 ---
 
@@ -18,7 +18,7 @@ This is a full-stack web application demonstrating modern DevOps practices inclu
 1. **Azure App Service** - Web application hosting (PaaS)
 2. **Azure SQL Database** - Managed relational database
 3. **Azure Application Insights** - Application monitoring and telemetry
-4. **Azure DevOps** - CI/CD pipelines and project management
+4. **GitHub Actions** - CI/CD pipelines and automation
 5. **Azure Monitor** - Logging and dashboards
 
 ### Architecture Diagram
@@ -58,11 +58,11 @@ This is a full-stack web application demonstrating modern DevOps practices inclu
 
 - **Backend:** Python 3.11, Flask 3.0
 - **Database:** SQLite (local) / Azure SQL (production)
-- **Monitoring:** Azure Application Insights, OpenCensus
+- **Monitoring:** Azure Application Insights, OpenCensus, Prometheus
 - **Testing:** Pytest with coverage
-- **CI/CD:** Azure DevOps Pipelines
-- **Deployment:** Gunicorn, Azure App Service
-- **Version Control:** Git, Azure Repos
+- **CI/CD:** GitHub Actions
+- **Deployment:** Gunicorn, Azure App Service, Docker
+- **Version Control:** Git, GitHub
 
 ---
 
@@ -71,7 +71,9 @@ This is a full-stack web application demonstrating modern DevOps practices inclu
 ### Core Functionality
 - ✅ Create, read, update, and delete tasks
 - ✅ Mark tasks as complete/incomplete
-- ✅ Task descriptions and timestamps
+- ✅ Task due dates with overdue highlighting
+- ✅ Filter tasks (All/Active/Completed)
+- ✅ Search tasks by title
 - ✅ Responsive UI with modern design
 
 ### DevOps Features
@@ -246,7 +248,7 @@ open htmlcov/index.html
 ### Prerequisites
 
 1. Azure subscription
-2. Azure DevOps organization
+2. GitHub account with repository access
 3. Azure CLI installed
 
 ### Step 1: Create Azure Resources
@@ -320,13 +322,16 @@ az webapp config set \
   --startup-file "gunicorn --config gunicorn_config.py app:app"
 ```
 
-### Step 4: Deploy via Azure DevOps
+### Step 4: Deploy via GitHub Actions
 
-1. Create a new pipeline in Azure DevOps
-2. Use the `azure-pipelines.yml` file
-3. Configure service connection to Azure
-4. Update variables in the pipeline
-5. Run the pipeline
+1. Configure GitHub Secrets in repository settings:
+   - `AZURE_CREDENTIALS`
+   - `AZURE_WEBAPP_NAME`
+   - `AZURE_RESOURCE_GROUP`
+   - `AZURE_SQL_CONNECTION_STRING`
+   - `APPINSIGHTS_INSTRUMENTATIONKEY`
+2. Push to `main` branch to trigger deployment
+3. Monitor workflow in GitHub Actions tab
 
 ---
 
@@ -474,13 +479,15 @@ Task_Manager/
 - ✅ Production-ready deployment automation
 - ✅ Environment-based configuration
 
-### Sprint 4 - CI/CD Pipeline (Complete)
-- ✅ Enhanced CI/CD pipeline with multi-stage deployment
-- ✅ Automated testing in pipeline (unit tests + coverage)
-- ✅ Automated deployment to production and staging
-- ✅ Post-deployment smoke tests
-- ✅ Complete Azure DevOps setup documentation
-- ✅ CI/CD architecture documentation
+### Sprint 4 - Enhanced Features & Polish (Complete)
+- ✅ Task due dates implementation
+- ✅ Task filtering (All/Active/Completed)
+- ✅ Search functionality
+- ✅ Overdue task highlighting
+- ✅ UI enhancements and polish
+- ✅ Docker compose with monitoring stack
+- ✅ Demo preparation and documentation
+- ✅ Comprehensive Scrum artifacts documentation
 
 ---
 
@@ -512,7 +519,7 @@ Task_Manager/
 For questions or issues:
 - Create an issue in the repository
 - Contact the development team
-- Check Azure DevOps backlog
+- Check GitHub Issues and Projects board
 
 ---
 
