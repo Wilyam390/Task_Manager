@@ -31,3 +31,4 @@ __pycache__/
 # Deployment artifacts
 *.zip
 deployment/
+app.log
