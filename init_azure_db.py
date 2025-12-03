@@ -25,15 +25,17 @@ CREATE TABLE tasks (
     id INT IDENTITY(1,1) PRIMARY KEY,
     title NVARCHAR(200) NOT NULL,
     completed BIT NOT NULL DEFAULT 0,
+    priority NVARCHAR(10) NOT NULL DEFAULT 'Medium',
+    category NVARCHAR(100) DEFAULT 'General',
     due_date DATETIME2 NULL,
     created_at DATETIME2 DEFAULT GETDATE()
 );
 
 -- Insert sample data
-INSERT INTO tasks (title, completed) VALUES
-    ('Welcome to Task Manager on Azure!', 0),
-    ('Configure Azure DevOps Pipeline', 0),
-    ('Deploy to Production', 0);
+INSERT INTO tasks (title, completed, priority, category) VALUES
+    ('Welcome to Task Manager on Azure!', 0, 'High', 'School'),
+    ('Configure Azure DevOps Pipeline', 0, 'Medium', 'Work'),
+    ('Deploy to Production', 0, 'Medium', 'Work');
 """
 
 def init_database():

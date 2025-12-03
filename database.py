@@ -92,6 +92,8 @@ def init_azure_sql_schema(conn):
             title NVARCHAR(255) NOT NULL,
             description NVARCHAR(MAX),
             completed BIT DEFAULT 0,
+            priority NVARCHAR(10) NOT NULL DEFAULT 'Medium',
+            category NVARCHAR(100) DEFAULT 'General',
             due_date DATETIME NULL,
             created_at DATETIME DEFAULT GETDATE()
         )

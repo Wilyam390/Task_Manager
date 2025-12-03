@@ -16,12 +16,12 @@ def init_db():
     
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO tasks (title, description, completed, due_date) 
-        VALUES ('Sample Task', 'This is a sample task', 0, datetime('now', '+1 day'))
+        INSERT INTO tasks (title, description, completed, priority, category, due_date) 
+        VALUES ('Sample Task', 'This is a sample task', 0, 'High', 'Work', datetime('now', '+1 day'))
     """)
     cursor.execute("""
-        INSERT INTO tasks (title, description, completed, due_date) 
-        VALUES ('Completed Task', 'This task is done', 1, datetime('now'))
+        INSERT INTO tasks (title, description, completed, priority, category, due_date) 
+        VALUES ('Completed Task', 'This task is done', 1, 'Low', 'Personal', datetime('now'))
     """)
     
     conn.commit()

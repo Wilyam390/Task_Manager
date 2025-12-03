@@ -38,35 +38,50 @@ app.config.from_object(config.get(env, config['default']))
 app.secret_key = app.config['SECRET_KEY']
 
 
-def ensure_due_date_column():
-    """Add due_date column if it is missing (helps older DBs)."""
+def ensure_schema_columns():
+    """Ensure optional columns exist (supports older DBs)."""
+    columns_needed = [
+        ('due_date', "ALTER TABLE tasks ADD due_date DATETIME"),
+        ('priority', "ALTER TABLE tasks ADD priority VARCHAR(10) NOT NULL DEFAULT 'Medium'"),
+        ('category', "ALTER TABLE tasks ADD category VARCHAR(100) DEFAULT 'General'")
+    ]
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
         if app.config['DB_TYPE'] == 'azure_sql':
-            cursor.execute(
-                "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='tasks' AND COLUMN_NAME='due_date'"
-            )
-            exists = cursor.fetchone()
-            if not exists:
-                cursor.execute("ALTER TABLE tasks ADD due_date DATETIME NULL")
-                conn.commit()
-                logger.info("Added due_date column to Azure SQL tasks table")
+            azure_alters = {
+                'due_date': "ALTER TABLE tasks ADD due_date DATETIME",
+                'priority': "ALTER TABLE tasks ADD priority NVARCHAR(10) NOT NULL DEFAULT 'Medium'",
+                'category': "ALTER TABLE tasks ADD category NVARCHAR(100) DEFAULT 'General'",
+            }
+            for name, alter_stmt in azure_alters.items():
+                cursor.execute(
+                    "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='tasks' AND COLUMN_NAME=?",
+                    (name,)
+                )
+                exists = cursor.fetchone()
+                if not exists:
+                    cursor.execute(alter_stmt)
+                    conn.commit()
+                    logger.info("Added %s column to Azure SQL tasks table", name)
         else:
             cursor.execute("PRAGMA table_info(tasks)")
-            columns = []
+            existing = []
             for row in cursor.fetchall():
                 try:
-                    columns.append(row['name'])
+                    existing.append(row['name'])
                 except Exception:
-                    columns.append(row[1] if len(row) > 1 else row[0])
-            if 'due_date' not in columns:
-                cursor.execute("ALTER TABLE tasks ADD COLUMN due_date DATETIME")
-                conn.commit()
-                logger.info("Added due_date column to SQLite tasks table")
+                    existing.append(row[1] if len(row) > 1 else row[0])
+
+            for name, alter_stmt in columns_needed:
+                if name not in existing:
+                    cursor.execute(alter_stmt)
+                    conn.commit()
+                    logger.info("Added %s column to SQLite tasks table", name)
     except Exception as exc:
-        logger.warning("Could not ensure due_date column exists: %s", exc)
+        logger.warning("Could not ensure schema columns exist: %s", exc)
     finally:
         try:
             cursor.close()
@@ -102,16 +117,17 @@ def row_to_dict(row, columns):
 
 def fetch_tasks():
     """Fetch tasks and annotate with derived flags."""
-    ensure_due_date_column()
+    ensure_schema_columns()
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, title, description, completed, created_at, due_date FROM tasks ORDER BY created_at DESC"
+        "SELECT id, title, description, completed, created_at, due_date, priority, category FROM tasks ORDER BY created_at DESC"
     )
     rows = cursor.fetchall()
     column_names = [col[0] for col in cursor.description] if cursor.description else []
 
     tasks = []
+    priority_order = {'High': 3, 'Medium': 2, 'Low': 1}
     now = datetime.now()
     for row in rows:
         raw = row_to_dict(row, column_names)
@@ -124,10 +140,13 @@ def fetch_tasks():
             'description': raw.get('description', ''),
             'completed': bool(raw.get('completed')),
             'created_at': created_at,
-            'due_date': due_date
+            'due_date': due_date,
+            'priority': raw.get('priority', 'Medium'),
+            'category': raw.get('category', 'General')
         }
         task['is_overdue'] = (not task['completed']) and task['due_date'] is not None and task['due_date'] < now
         task['is_due_today'] = task['due_date'] is not None and task['due_date'].date() == now.date()
+        task['priority_rank'] = priority_order.get(task['priority'], 2)
         tasks.append(task)
 
     cursor.close()
@@ -159,11 +178,14 @@ def home():
 
         search_term = request.args.get('q', '').strip().lower()
         status_filter = request.args.get('status', 'all')
-        sort_option = request.args.get('sort', 'created_desc')
+        category_filter = request.args.get('category', 'all').strip()
+        sort_option = request.args.get('sort', 'priority_desc')
 
         filtered = []
         for task in tasks:
             if search_term and search_term not in task['title'].lower():
+                continue
+            if category_filter not in ('', 'all') and task['category'].lower() != category_filter.lower():
                 continue
 
             if status_filter == 'completed' and not task['completed']:
@@ -178,21 +200,31 @@ def home():
 
             filtered.append(task)
 
-        reverse = True if sort_option == 'created_desc' else False
-        filtered.sort(key=lambda t: t['created_at'] or datetime.min, reverse=reverse)
+        if sort_option.startswith('priority'):
+            reverse = sort_option == 'priority_desc'
+            filtered.sort(key=lambda t: t.get('priority_rank', 2), reverse=reverse)
+        else:
+            reverse = True if sort_option == 'created_desc' else False
+            filtered.sort(key=lambda t: t['created_at'] or datetime.min, reverse=reverse)
+
+        grouped_tasks = {}
+        for task in filtered:
+            category = task.get('category', 'General') or 'General'
+            grouped_tasks.setdefault(category, []).append(task)
 
         filters = {
             'q': search_term,
             'status': status_filter,
-            'sort': sort_option
+            'sort': sort_option,
+            'category': category_filter
         }
 
         logger.info("Rendering %d tasks after filters", len(filtered))
-        return render_template('index.html', tasks=filtered, filters=filters)
+        return render_template('index.html', tasks=filtered, grouped_tasks=grouped_tasks, filters=filters)
     except Exception as exc:
         logger.error("Error fetching tasks: %s", exc)
         flash('Error loading tasks', 'error')
-        return render_template('index.html', tasks=[], filters={})
+        return render_template('index.html', tasks=[], grouped_tasks={}, filters={})
 
 
 @app.route('/task/add', methods=['POST'])
@@ -201,6 +233,8 @@ def add_task():
     try:
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
+        priority = request.form.get('priority', 'Medium').title()
+        category = request.form.get('category', 'General').strip() or 'General'
         due_date_str = request.form.get('due_date', '').strip()
 
         if not title:
@@ -221,11 +255,14 @@ def add_task():
                 flash('Invalid due date format', 'error')
                 return redirect(url_for('home'))
 
+        if priority not in ('High', 'Medium', 'Low'):
+            priority = 'Medium'
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'INSERT INTO tasks (title, description, due_date) VALUES (?, ?, ?)',
-            (title, description, due_date.isoformat() if due_date else None)
+            'INSERT INTO tasks (title, description, due_date, priority, category) VALUES (?, ?, ?, ?, ?)',
+            (title, description, due_date.isoformat() if due_date else None, priority, category)
         )
         conn.commit()
         cursor.close()
@@ -304,6 +341,57 @@ def delete_task(task_id):
     except Exception as exc:
         logger.error("Error deleting task %s: %s", task_id, exc)
         flash('Error deleting task', 'error')
+        return redirect(url_for('home'))
+
+
+@app.route('/task/<int:task_id>/edit', methods=['POST'])
+def edit_task(task_id):
+    """Edit an existing task."""
+    try:
+        title = request.form.get('title', '').strip()
+        description = request.form.get('description', '').strip()
+        priority = request.form.get('priority', 'Medium').title()
+        category = request.form.get('category', 'General').strip() or 'General'
+        due_date_str = request.form.get('due_date', '').strip()
+
+        if not title:
+            flash('Task title is required', 'error')
+            return redirect(url_for('home'))
+
+        if len(title) > 255:
+            flash('Task title too long (max 255 characters)', 'error')
+            return redirect(url_for('home'))
+
+        if priority not in ('High', 'Medium', 'Low'):
+            priority = 'Medium'
+
+        due_date = None
+        if due_date_str:
+            try:
+                due_date = datetime.strptime(due_date_str, "%Y-%m-%dT%H:%M")
+            except ValueError:
+                flash('Invalid due date format', 'error')
+                return redirect(url_for('home'))
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE tasks 
+            SET title = ?, description = ?, priority = ?, category = ?, due_date = ?
+            WHERE id = ?
+            """,
+            (title, description, priority, category, due_date.isoformat() if due_date else None, task_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        flash('Task updated successfully', 'success')
+        return redirect(url_for('home'))
+    except Exception as exc:
+        logger.error("Error editing task %s: %s", task_id, exc)
+        flash('Error updating task', 'error')
         return redirect(url_for('home'))
 
 

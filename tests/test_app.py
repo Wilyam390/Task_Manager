@@ -10,9 +10,12 @@ from app import app
 def client():
     """Create test client with fresh database"""
     app.config['TESTING'] = True
+    import os
     
     import sqlite3
     # Initialize database with schema
+    if os.path.exists('tasks.db'):
+        os.remove('tasks.db')
     conn = sqlite3.connect('tasks.db')
     cursor = conn.cursor()
     
@@ -23,6 +26,8 @@ def client():
             title TEXT NOT NULL,
             description TEXT,
             completed INTEGER DEFAULT 0,
+            priority TEXT DEFAULT 'Medium',
+            category TEXT DEFAULT 'General',
             due_date DATETIME,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -30,7 +35,7 @@ def client():
     
     # Clear existing data and insert test data
     cursor.execute('DELETE FROM tasks')
-    cursor.execute("INSERT INTO tasks (title, completed) VALUES ('Test Task', 0)")
+    cursor.execute("INSERT INTO tasks (title, completed, priority, category) VALUES ('Test Task', 0, 'High', 'Work')")
     conn.commit()
     conn.close()
     
@@ -51,7 +56,9 @@ def test_home_displays_tasks(client):
 def test_add_task_success(client):
     """Test adding a valid task"""
     response = client.post('/task/add', data={
-        'title': 'New Task'
+        'title': 'New Task',
+        'priority': 'Low',
+        'category': 'Personal'
     }, follow_redirects=True)
     
     assert response.status_code == 200
@@ -98,3 +105,22 @@ def test_health_endpoint(client):
     assert response.status_code == 200
     data = response.get_json()
     assert data['status'] == 'healthy'
+
+def test_edit_task(client):
+    """Test editing an existing task"""
+    import sqlite3
+    conn = sqlite3.connect('tasks.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM tasks LIMIT 1')
+    task_id = cursor.fetchone()[0]
+    conn.close()
+
+    response = client.post(f'/task/{task_id}/edit', data={
+        'title': 'Updated Title',
+        'description': 'Updated description',
+        'priority': 'Medium',
+        'category': 'School'
+    }, follow_redirects=True)
+
+    assert response.status_code == 200
+    assert b'Updated Title' in response.data

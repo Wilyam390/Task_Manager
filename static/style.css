@@ -196,6 +196,16 @@ footer {
     border-color: #667eea;
 }
 
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    font-size: 16px;
+    font-family: inherit;
+    background: white;
+}
+
 .form-group.inline {
     display: flex;
     flex-direction: column;
@@ -205,6 +215,12 @@ footer {
 .form-group.inline label {
     font-size: 0.95em;
     color: #555;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
 }
 
 .btn-primary {
@@ -292,6 +308,7 @@ footer {
 }
 
 .filters input[type="search"],
+.filters input[type="text"],
 .filters select {
     padding: 10px;
     border: 2px solid #ddd;
@@ -324,6 +341,68 @@ footer {
 
 .btn-text:hover {
     text-decoration: underline;
+}
+
+.category-group {
+    margin-bottom: 24px;
+}
+
+.category-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.badge {
+    background: #eef2ff;
+    color: #4a4a4a;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    border: 1px solid #d7dbff;
+}
+
+.pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    margin-right: 6px;
+}
+
+.priority-high {
+    background: #ffe3e3;
+    color: #b80000;
+}
+
+.priority-medium {
+    background: #fff4d6;
+    color: #b37a00;
+}
+
+.priority-low {
+    background: #e7f6e7;
+    color: #2f7a2f;
+}
+
+.pill.category {
+    background: #eef6ff;
+    color: #225b9e;
+}
+
+.edit-panel {
+    margin-top: 12px;
+}
+
+.edit-panel summary {
+    cursor: pointer;
+    color: #667eea;
+    font-weight: 600;
+}
+
+.edit-panel form {
+    margin-top: 10px;
 }
 
 @media (max-width: 600px) {
