@@ -30,10 +30,30 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: 🧪 Run tests
+    - name: 🧪 Run tests with coverage
       run: |
-        pip install pytest
-        pytest tests/ -v
+        pip install pytest pytest-cov
+        pytest --cov=app --cov=config --cov=database --cov-report=term --cov-report=html --cov-fail-under=70 tests/ -v
+    
+    - name: 📊 Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: htmlcov/
+    
+    - name: 🐳 Build Docker image
+      run: |
+        docker build -t task-manager:${{ github.sha }} -t task-manager:latest .
+    
+    - name: 💾 Save Docker image
+      run: |
+        docker save task-manager:latest | gzip > task-manager-docker.tar.gz
+    
+    - name: 📤 Upload Docker image
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-image
+        path: task-manager-docker.tar.gz
 
     - name: 📦 Create deployment package
       run: |

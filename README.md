@@ -85,6 +85,92 @@ This is a full-stack web application demonstrating modern DevOps practices inclu
 
 ---
 
+## 🐳 Docker Deployment
+
+### Build and Run with Docker
+
+**Build the Docker image:**
+```bash
+docker build -t task-manager:latest .
+```
+
+**Run the container:**
+```bash
+# Run with SQLite (development)
+docker run -p 8000:8000 \
+  -e ENVIRONMENT=development \
+  -e SECRET_KEY=your-secret-key \
+  task-manager:latest
+
+# Run with Azure SQL (production)
+docker run -p 8000:8000 \
+  -e ENVIRONMENT=production \
+  -e SECRET_KEY=your-secret-key \
+  -e AZURE_SQL_CONNECTION_STRING="your-connection-string" \
+  -e APPINSIGHTS_INSTRUMENTATION_KEY="your-instrumentation-key" \
+  task-manager:latest
+```
+
+**Access the application:**
+- Web UI: http://localhost:8000
+- Health check: http://localhost:8000/health
+- Metrics: http://localhost:8000/metrics
+
+### Docker Compose (with Monitoring)
+
+**Start all services (app + Prometheus + Grafana):**
+```bash
+docker-compose up -d
+```
+
+**Access services:**
+- **Task Manager**: http://localhost:8000
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 (admin/admin)
+
+**Stop services:**
+```bash
+docker-compose down
+```
+
+**View logs:**
+```bash
+docker-compose logs -f app
+```
+
+---
+
+## 🧪 Testing
+
+### Run Unit Tests
+```bash
+python -m pytest tests/test_app.py -v
+```
+
+### Run Integration Tests
+```bash
+python -m pytest tests/test_integration.py -v
+```
+
+### Run All Tests with Coverage
+```bash
+python -m pytest --cov=app --cov=config --cov=database \
+  --cov-report=term --cov-report=html tests/ -v
+```
+
+**View coverage report:**
+```bash
+open htmlcov/index.html  # macOS
+xdg-open htmlcov/index.html  # Linux
+start htmlcov/index.html  # Windows
+```
+
+**Coverage Requirements:**
+- Minimum: 70%
+- Current: 74% (app.py)
+
+---
+
 ## 🚦 Getting Started
 
 ### Prerequisites
