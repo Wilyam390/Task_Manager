@@ -3,6 +3,7 @@ Database connection module supporting both SQLite and Azure SQL
 """
 import sqlite3
 import logging
+from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,19 @@ def init_azure_sql_schema(conn):
     """Initialize Azure SQL schema"""
     cursor = conn.cursor()
     
-    # Check if table exists
+    # Create users table
+    cursor.execute("""
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' AND xtype='U')
+        CREATE TABLE users (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            username NVARCHAR(80) UNIQUE NOT NULL,
+            email NVARCHAR(120) UNIQUE NOT NULL,
+            password_hash NVARCHAR(255) NOT NULL,
+            created_at DATETIME DEFAULT GETDATE()
+        )
+    """)
+    
+    # Create tasks table with user_id foreign key
     cursor.execute("""
         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='tasks' AND xtype='U')
         CREATE TABLE tasks (
@@ -95,7 +108,9 @@ def init_azure_sql_schema(conn):
             priority NVARCHAR(10) NOT NULL DEFAULT 'Medium',
             category NVARCHAR(100) DEFAULT 'General',
             due_date DATETIME NULL,
-            created_at DATETIME DEFAULT GETDATE()
+            created_at DATETIME DEFAULT GETDATE(),
+            user_id INT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
     
@@ -140,3 +155,158 @@ def execute_query(query, params=None, fetch_one=False, fetch_all=False):
     finally:
         cursor.close()
         conn.close()
+
+
+# User Authentication Functions
+
+def create_user(username, email, password):
+    """
+    Create a new user with hashed password
+    
+    Args:
+        username: Unique username
+        email: Unique email address
+        password: Plain text password (will be hashed)
+    
+    Returns:
+        User ID if successful, None if user exists
+    """
+    try:
+        password_hash = generate_password_hash(password)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        if Config.DB_TYPE == 'azure_sql':
+            cursor.execute(
+                "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+                (username, email, password_hash)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+                (username, email, password_hash)
+            )
+        
+        conn.commit()
+        user_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        
+        logger.info(f"User created: {username}")
+        return user_id
+    except Exception as e:
+        logger.error(f"Failed to create user: {e}")
+        return None
+
+
+def get_user_by_username(username):
+    """
+    Retrieve user by username
+    
+    Args:
+        username: Username to search for
+    
+    Returns:
+        User dict or None if not found
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email, password_hash FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if user:
+            return dict(user) if hasattr(user, 'keys') else {
+                'id': user[0],
+                'username': user[1],
+                'email': user[2],
+                'password_hash': user[3]
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get user by username: {e}")
+        return None
+
+
+def get_user_by_email(email):
+    """
+    Retrieve user by email
+    
+    Args:
+        email: Email to search for
+    
+    Returns:
+        User dict or None if not found
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email, password_hash FROM users WHERE email = ?", (email,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if user:
+            return dict(user) if hasattr(user, 'keys') else {
+                'id': user[0],
+                'username': user[1],
+                'email': user[2],
+                'password_hash': user[3]
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get user by email: {e}")
+        return None
+
+
+def verify_user(username, password):
+    """
+    Verify user credentials
+    
+    Args:
+        username: Username or email
+        password: Plain text password to verify
+    
+    Returns:
+        User dict if valid, None if invalid
+    """
+    # Try username first, then email
+    user = get_user_by_username(username)
+    if not user:
+        user = get_user_by_email(username)
+    
+    if user and check_password_hash(user['password_hash'], password):
+        return user
+    return None
+
+
+def get_user_by_id(user_id):
+    """
+    Retrieve user by ID
+    
+    Args:
+        user_id: User ID
+    
+    Returns:
+        User dict or None if not found
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, email FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if user:
+            return dict(user) if hasattr(user, 'keys') else {
+                'id': user[0],
+                'username': user[1],
+                'email': user[2]
+            }
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get user by ID: {e}")
+        return None
