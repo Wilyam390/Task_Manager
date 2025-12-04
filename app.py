@@ -1,11 +1,12 @@
 import logging
 import sys
 from datetime import datetime
+from functools import wraps
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response, session
 
 from config import config, Config
-from database import get_db_connection
+from database import get_db_connection, create_user, verify_user, get_user_by_id, get_user_by_username, get_user_by_email
 
 # Prometheus metrics (optional)
 try:
@@ -107,6 +108,18 @@ def parse_datetime_value(value):
         return None
 
 
+# Authentication decorator
+def login_required(f):
+    """Decorator to require login for routes."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def row_to_dict(row, columns):
     """Normalize DB row to dict for both SQLite and Azure SQL."""
     try:
@@ -118,11 +131,27 @@ def row_to_dict(row, columns):
 def fetch_tasks():
     """Fetch tasks and annotate with derived flags."""
     ensure_schema_columns()
+    
+    # Get current user's ID from session
+    user_id = session.get('user_id')
+    if not user_id:
+        return []
+    
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, title, description, completed, created_at, due_date, priority, category FROM tasks ORDER BY created_at DESC"
-    )
+    
+    # Check if user_id column exists, if not skip filtering by user
+    try:
+        cursor.execute(
+            "SELECT id, title, description, completed, created_at, due_date, priority, category FROM tasks WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
+        )
+    except Exception:
+        # Fallback for old schema without user_id
+        cursor.execute(
+            "SELECT id, title, description, completed, created_at, due_date, priority, category FROM tasks ORDER BY created_at DESC"
+        )
+    
     rows = cursor.fetchall()
     column_names = [col[0] for col in cursor.description] if cursor.description else []
 
@@ -170,7 +199,111 @@ if PROMETHEUS_AVAILABLE:
         return response
 
 
+# Authentication Routes
+
+@app.route('/landing')
 @app.route('/')
+def landing():
+    """Landing page for unauthenticated users."""
+    if 'user_id' in session:
+        return redirect(url_for('home'))
+    return render_template('landing.html')
+
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    """User registration."""
+    if 'user_id' in session:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        
+        # Validation
+        if not username or not email or not password:
+            flash('All fields are required', 'error')
+            return render_template('signup.html')
+        
+        if len(username) < 3 or len(username) > 80:
+            flash('Username must be between 3 and 80 characters', 'error')
+            return render_template('signup.html')
+        
+        if len(password) < 6:
+            flash('Password must be at least 6 characters', 'error')
+            return render_template('signup.html')
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return render_template('signup.html')
+        
+        # Check if user already exists
+        if get_user_by_username(username):
+            flash('Username already exists', 'error')
+            return render_template('signup.html')
+        
+        if get_user_by_email(email):
+            flash('Email already registered', 'error')
+            return render_template('signup.html')
+        
+        # Create user
+        user_id = create_user(username, email, password)
+        if user_id:
+            session['user_id'] = user_id
+            session['username'] = username
+            flash(f'Welcome, {username}! Your account has been created.', 'success')
+            logger.info(f"New user registered: {username}")
+            return redirect(url_for('home'))
+        else:
+            flash('Error creating account. Please try again.', 'error')
+            return render_template('signup.html')
+    
+    return render_template('signup.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login."""
+    if 'user_id' in session:
+        return redirect(url_for('home'))
+    
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        if not username or not password:
+            flash('Username and password are required', 'error')
+            return render_template('login.html')
+        
+        user = verify_user(username, password)
+        if user:
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            flash(f'Welcome back, {user["username"]}!', 'success')
+            logger.info(f"User logged in: {user['username']}")
+            return redirect(url_for('home'))
+        else:
+            flash('Invalid username or password', 'error')
+            return render_template('login.html')
+    
+    return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    """User logout."""
+    username = session.get('username', 'User')
+    session.clear()
+    flash(f'Goodbye, {username}!', 'success')
+    logger.info(f"User logged out: {username}")
+    return redirect(url_for('landing'))
+
+
+@app.route('/home')
+@app.route('/tasks')
+@login_required
 def home():
     """Display all tasks with filtering, search, and sorting."""
     try:
@@ -228,6 +361,7 @@ def home():
 
 
 @app.route('/task/add', methods=['POST'])
+@login_required
 def add_task():
     """Create a new task."""
     try:
@@ -236,6 +370,7 @@ def add_task():
         priority = request.form.get('priority', 'Medium').title()
         category = request.form.get('category', 'General').strip() or 'General'
         due_date_str = request.form.get('due_date', '').strip()
+        user_id = session.get('user_id')
 
         if not title:
             logger.warning("Task creation attempted without title")
@@ -260,10 +395,19 @@ def add_task():
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            'INSERT INTO tasks (title, description, due_date, priority, category) VALUES (?, ?, ?, ?, ?)',
-            (title, description, due_date.isoformat() if due_date else None, priority, category)
-        )
+        
+        # Try to insert with user_id, fallback to without for old schema
+        try:
+            cursor.execute(
+                'INSERT INTO tasks (title, description, due_date, priority, category, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+                (title, description, due_date.isoformat() if due_date else None, priority, category, user_id)
+            )
+        except Exception:
+            cursor.execute(
+                'INSERT INTO tasks (title, description, due_date, priority, category) VALUES (?, ?, ?, ?, ?)',
+                (title, description, due_date.isoformat() if due_date else None, priority, category)
+            )
+        
         conn.commit()
         cursor.close()
         conn.close()
@@ -281,6 +425,7 @@ def add_task():
 
 
 @app.route('/task/<int:task_id>/toggle', methods=['POST'])
+@login_required
 def toggle_task(task_id):
     """Toggle task completion status."""
     try:
@@ -317,6 +462,7 @@ def toggle_task(task_id):
 
 
 @app.route('/task/<int:task_id>/delete', methods=['POST'])
+@login_required
 def delete_task(task_id):
     """Delete a task."""
     try:
@@ -345,6 +491,7 @@ def delete_task(task_id):
 
 
 @app.route('/task/<int:task_id>/edit', methods=['POST'])
+@login_required
 def edit_task(task_id):
     """Edit an existing task."""
     try:
