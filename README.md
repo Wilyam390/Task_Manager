@@ -382,6 +382,14 @@ Access metrics at: `https://portal.azure.com`
 - Azure App Service logs
 - Stream logs: `az webapp log tail --name taskmanager-app --resource-group taskmanager-rg`
 
+### Grafana Dashboard (Prometheus)
+
+- Dashboard JSON: `monitoring/grafana-dashboard.json`
+- Data source: Prometheus scraping the app at `/metrics` (matches `prometheus.yml` target `app:8000`)
+- Import: Grafana → Dashboards → Import → Upload `grafana-dashboard.json`
+- Panels: request rate by status, error rate, request latency (p50/p95), task operations rate
+- Refresh: 30s; default time range 1h
+
 ### Health Check
 
 Monitor application health:
@@ -415,6 +423,8 @@ Task_Manager/
 ├── Dockerfile                  # Docker container configuration
 ├── docker-compose.yml         # Multi-container orchestration
 ├── prometheus.yml             # Prometheus monitoring config
+├── monitoring/                # Monitoring assets (Grafana dashboards)
+│   └── grafana-dashboard.json # Prometheus-backed service overview
 ├── .env.example               # Environment variables template
 ├── .gitignore                 # Git ignore rules
 ├── README.md                  # This file
